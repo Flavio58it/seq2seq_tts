@@ -1,0 +1,45 @@
+{
+     "audio_processor": "mag",
+     "text_processor": "english",
+     
+     "sampling_rate": 16000,
+     "preemphasis": 0.97,
+     "min_db": -100,
+     "ref_db": 20,
+     "frame_shift": 0.0125,
+     "frame_length": 0.05,
+
+     "n_fft": 1024,
+     "n_mels": 80,
+     "fmin": 100,
+     "fmax": 7600,
+     "num_gl_iters": 60,
+
+     "embedding_dim": 512,
+
+     "enc_num_layers": 3,
+     "enc_kernel_size": 5,
+     "enc_filters": 512,
+     "enc_BLSTM_size": 512,
+
+     "attn_size": 128,
+     "location_kernel_size": 31,
+     "location_filters": 32,
+
+     "dec_prenet": [256, 256],
+     "dec_num_layers": 2,
+     "dec_LSTM_size": 1024,
+     "max_dec_steps": 2000,
+
+     "postnet_num_layers": 5,
+     "postnet_kernel_size": 5,
+     "postnet_filters": 512,
+
+     "dropout_rate": 0.5,
+
+     "num_epochs": 10000,
+     "steps_per_checkpoint": 1500,
+     "batch_size": 32,
+     "lr": 1e-3,
+     "L2_reg_weight": 1e-6
+}
