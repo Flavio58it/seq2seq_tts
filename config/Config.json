@@ -1,6 +1,8 @@
 {
      "audio_processor": "mag",
      "text_processor": "english",
+
+     "model": "Tacotron2",
      
      "sampling_rate": 16000,
      "preemphasis": 0.97,
