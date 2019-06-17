@@ -30,7 +30,7 @@
 
      "dec_prenet": [256, 256],
      "dec_num_layers": 2,
-     "dec_LSTM_size": 1024,
+     "dec_LSTM_size": 512,
      "max_dec_steps": 2000,
 
      "postnet_num_layers": 5,
