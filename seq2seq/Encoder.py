@@ -1,11 +1,9 @@
 """seq2seq Encoder"""
 
-import torch
 import torch.functional as F
 import torch.nn as nn
 
 from layers.Convolution import BatchNormConv1D
-from layers.Linear import Dense
 
 
 class Tacotron2Encoder(nn.Module):
