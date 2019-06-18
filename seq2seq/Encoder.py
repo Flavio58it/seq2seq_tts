@@ -27,7 +27,7 @@ class Tacotron2Encoder(nn.Module):
         inputs = inputs.transpose(1, 2)
 
         for conv in self.convs:
-            inputs = conv(inputs)
+            inputs = conv(inputs, training=True)
 
         inputs = inputs.transpose(1, 2)
 
@@ -47,7 +47,7 @@ class Tacotron2Encoder(nn.Module):
         inputs = inputs.transpose(1, 2)
 
         for conv in self.convs:
-            inputs = conv(inputs)
+            inputs = conv(inputs, training=False)
 
         inputs = inputs.transpose(1, 2)
 
