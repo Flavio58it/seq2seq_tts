@@ -12,9 +12,6 @@
      "frame_length": 0.05,
 
      "n_fft": 1024,
-     "n_mels": 80,
-     "fmin": 100,
-     "fmax": 7600,
      "num_gl_iters": 60,
 
      "embedding_dim": 512,
