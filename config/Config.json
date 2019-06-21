@@ -12,6 +12,7 @@
      "frame_length": 0.05,
 
      "n_fft": 1024,
+     
      "num_gl_iters": 60,
 
      "embedding_dim": 512,
