@@ -15,12 +15,11 @@ def feature_extraction(wav_dir, output_dir, config):
     output_dir = os.path.join(output_dir, config["audio_processor"])
     os.makedirs(output_dir, exist_ok=True)
 
-    if config["audio_processor"] == "mag" or config["audio_processor"] == "mel":
+    if config["audio_processor"] == "mag":
         audio_processor = STFTProcessor(sampling_rate=config["sampling_rate"], n_fft=config["n_fft"],
-                                        n_mels=config["n_mels"], preemphasis=config["preemphasis"],
-                                        frame_length=config["frame_length"], frame_shift=config["frame_shift"],
-                                        min_db=config["min_db"], ref_db=config["ref_db"], fmin=config["fmin"],
-                                        fmax=config["fmax"])
+                                        preemphasis=config["preemphasis"], frame_length=config["frame_length"],
+                                        frame_shift=config["frame_shift"], min_db=config["min_db"],
+                                        ref_db=config["ref_db"])
     else:
         raise NotImplementedError
 
@@ -29,16 +28,9 @@ def feature_extraction(wav_dir, output_dir, config):
         filename = os.path.splitext(wavfile)[0]
         print("Processing ..... %s ....." % (filename))
 
-        if config["audio_processor"] == "mel":
+        if config["audio_processor"] == "mag":
             # read the wav file into a signal
             y = audio_processor.load_wav(os.path.join(wav_dir, wavfile))
-
-            # extract features from signal
-            feats = audio_processor.mel_spectrogram(y).T
-        elif config["audio_processor"] == "mag":
-            # read the wav file into a signal
-            y = audio_processor.load_wav(os.path.join(wav_dir, wavfile))
-
             # extract features from signal
             feats = audio_processor.spectrogram(y).T
         else:
