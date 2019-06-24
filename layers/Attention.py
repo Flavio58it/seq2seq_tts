@@ -66,7 +66,7 @@ class LocationSensitiveAttention(nn.Module):
 
         return score
 
-    def forward(self, query, memory, attention_weights, mask):
+    def forward(self, query, memory, attention_weights, mask=None):
         """Forward pass
         """
         processed_query = self.query_layer(query)
