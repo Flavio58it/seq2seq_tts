@@ -12,7 +12,7 @@
      "frame_length": 0.05,
 
      "n_fft": 1024,
-     
+
      "num_gl_iters": 60,
 
      "embedding_dim": 512,
@@ -27,8 +27,8 @@
      "location_filters": 32,
 
      "dec_prenet": [256, 256],
-     "dec_num_layers": 2,
-     "dec_LSTM_size": 512,
+     "num_LSTMCells": 2,
+     "dec_LSTMCell_size": 512,
      "max_dec_steps": 2000,
 
      "postnet_num_layers": 5,
