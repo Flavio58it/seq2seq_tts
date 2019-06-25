@@ -94,15 +94,16 @@ class TTSDatasetCollate():
 def batch_to_gpu(batch):
     """Parse batch inputs; and place them on the GPU
     """
-    text_padded, text_lengths, audio_feats_padded, gate_padded, audio_feats_len = batch
+    text_padded, text_lengths, audio_feats_padded, gate_padded, audio_feats_lengths = batch
 
     text_padded = to_gpu(text_padded).long()
     text_lengths = to_gpu(text_lengths).long()
+    max_text_len = torch.max(text_lengths.data).item()
     audio_feats_padded = to_gpu(audio_feats_padded).float()
     gate_padded = to_gpu(gate_padded).float()
-    audio_feats_len = to_gpu(audio_feats_len).long()
+    audio_feats_lengths = to_gpu(audio_feats_lengths).long()
 
-    x = (text_padded, text_lengths, audio_feats_padded, audio_feats_len)
+    x = (text_padded, text_lengths, max_text_len, audio_feats_padded, audio_feats_lengths)
     y = (audio_feats_padded, gate_padded)
 
     return (x, y)
