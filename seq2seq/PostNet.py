@@ -1,7 +1,7 @@
 """Post Processing Network"""
 
-import torch
 import torch.nn as nn
+import torch
 
 from layers.Convolution import BatchNormConv1D
 
