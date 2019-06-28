@@ -18,7 +18,7 @@ class Tacotron2PostNet(nn.Module):
         layer_activations = (num_conv_layers - 1) * [torch.tanh] + [None]
 
         self.convs = nn.ModuleList([BatchNormConv1D(in_channels, out_channels, kernel_size=conv_kernel_size,
-                                                    activation=activation, dropout=dropout) 
+                                                    activation=activation, dropout=dropout)
                                     for in_channels, out_channels, activation in zip(layer_sizes, layer_sizes[1:],
                                     layer_activations)])
 
