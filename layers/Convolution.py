@@ -23,7 +23,7 @@ class Conv1D(nn.Module):
 
         torch.nn.init.xavier_uniform_(self.conv.weight, gain=nn.init.calculate_gain(w_init_gain))
 
-    def forward(self, inputs, training=False):
+    def forward(self, inputs):
         """Forward pass
         """
         return self.conv(inputs)
