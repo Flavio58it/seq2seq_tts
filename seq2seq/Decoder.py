@@ -1,9 +1,9 @@
 """seq2seq Decoder"""
 
 import torch
-import torch.autograd.Variable as Variable
-import torch.functional as F
 import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable
 
 from layers.Attention import LocationSensitiveAttention
 from layers.Linear import Dense, Prenet
@@ -17,6 +17,8 @@ class Tacotron2Decoder(nn.Module):
                  num_LSTMCells, dec_LSTMCell_size, dropout, max_decoder_steps):
         """Constructor
         """
+        super().__init__()
+
         self.target_dim = target_dim
         self.memory_dim = memory_dim
         self.attn_dim = attn_dim
@@ -64,7 +66,7 @@ class Tacotron2Decoder(nn.Module):
         """Parses decoder inputs used in teacher forcing training
         """
         # (batch_size, max_time, target_dim) -> (max_time, batch_size, target_dim)
-        decoder_inputs = decoder_inputs.tranpose(0, 1)
+        decoder_inputs = decoder_inputs.transpose(0, 1)
 
         return decoder_inputs
 
@@ -75,7 +77,7 @@ class Tacotron2Decoder(nn.Module):
         alignments = torch.stack(alignments).transpose(0, 1)
 
         # acoustic outputs: (batch_size, max_time, target_dim)
-        acoustic_outputs = torch.stack(acoustic_outputs).tranpose(0, 1).contiguous()
+        acoustic_outputs = torch.stack(acoustic_outputs).transpose(0, 1).contiguous()
 
         # gate outputs
         gate_outputs = torch.stack(gate_outputs).transpose(0, 1).contiguous()
@@ -100,9 +102,11 @@ class Tacotron2Decoder(nn.Module):
                                                                                               self.LSTM_cell[idx]))
             self.LSTM_hidden[idx] = F.dropout(self.LSTM_hidden[idx], self.dropout, training=training)
             self.LSTM_cell[idx] = F.dropout(self.LSTM_cell[idx], self.dropout, training=training)
+            cell_input = self.LSTM_hidden[idx]
 
-        attention_weights_cat = torch.cat((self.attention_weights.unsqueeze(-1), self.attention_weights_cumulative(-1)
-                                           ), dim=-1)
+        attention_weights_cat = torch.cat((self.attention_weights.unsqueeze(-1),
+                                           self.attention_weights_cumulative.unsqueeze(-1)), dim=-1)
+
         self.attention_context, self.attention_weights = self.attention(self.LSTM_hidden[-1], memory,
                                                                         attention_weights_cat, mask=mask)
 
