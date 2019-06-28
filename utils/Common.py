@@ -9,7 +9,11 @@ def get_mask(sequence_lengths):
     """Generate mask given sequence lengths
     """
     max_len = torch.max(sequence_lengths).item()
-    idx = torch.arange(0, max_len, out=torch.cuda.LongTensor(max_len))
+    if torch.cuda.is_available():
+        idx = torch.arange(0, max_len, out=torch.cuda.LongTensor(max_len))
+    else:
+        idx = torch.arange(0, max_len, out=torch.LongTensor(max_len))
+
     mask = (idx < sequence_lengths.unsqueeze(1)).byte()
 
     return ~mask
