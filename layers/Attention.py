@@ -1,7 +1,7 @@
 """Attention layer"""
 
 import torch
-import torch.functional as F
+import torch.nn.functional as F
 import torch.nn as nn
 
 from layers.Convolution import Conv1D
@@ -66,18 +66,20 @@ class LocationSensitiveAttention(nn.Module):
 
         return score
 
-    def forward(self, query, memory, attention_weights, mask=None):
+    def forward(self, query, memory, prev_attention_weights, mask=None):
         """Forward pass
         """
-        processed_query = self.query_layer(query)
+        processed_query = self.query_layer(query.unsqueeze(1))
         processed_memory = self.memory_layer(memory)
-        processed_attention_weights = self.location_layer(attention_weights)
+        processed_attention_weights = self.location_layer(prev_attention_weights)
 
         alignment = self.compute_alignment(processed_query, processed_memory, processed_attention_weights)
+
         if mask is not None:
             alignment.data.masked_fill_(mask, self.score_mask_value)
 
         attention_weights = F.softmax(alignment, dim=-1)
+
         attention_context = torch.bmm(attention_weights.unsqueeze(1), memory)
         attention_context = attention_context.squeeze(1)
 
