@@ -12,7 +12,7 @@ class Dense(nn.Module):
         """Constructor
         """
         super().__init__()
-        self.dense_layer = torch.nn.linear(in_dim, out_dim, bias=bias)
+        self.dense_layer = torch.nn.Linear(in_dim, out_dim, bias=bias)
 
         torch.nn.init.xavier_uniform_(self.dense_layer.weight, gain=torch.nn.init.calculate_gain(w_init_gain))
 
