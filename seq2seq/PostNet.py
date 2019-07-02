@@ -40,7 +40,7 @@ class Tacotron2PostNet(nn.Module):
         inputs = inputs.transpose(1, 2)
 
         for conv in self.convs:
-            inputs = conv(inputs, training=True)
+            inputs = conv(inputs, training=False)
 
         inputs = inputs.transpose(1, 2)
 
