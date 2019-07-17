@@ -1,5 +1,5 @@
 {
-     "audio_processor": "mag",
+     "audio_processor": "mel",
      "text_processor": "english",
 
      "model": "Tacotron2",
@@ -12,6 +12,9 @@
      "frame_length": 0.05,
 
      "n_fft": 1024,
+     "n_mel": 80,
+     "fmin": 125,
+     "fmax": 7600,
 
      "num_gl_iters": 60,
 
