@@ -8,13 +8,17 @@ from scipy import signal, io
 class STFTProcessor():
     """Audio processing class using STFT
     """
-    def __init__(self, sampling_rate, n_fft, preemphasis, frame_length, frame_shift, min_db, ref_db):
+    def __init__(self, sampling_rate, n_fft, n_mel, fmin, fmax, preemphasis, frame_length, frame_shift, min_db,
+                 ref_db):
         """Constructor
         """
         self.sampling_rate = sampling_rate
         self.min_db = min_db
         self.ref_db = ref_db
         self.n_fft = n_fft
+        self.n_mel = n_mel
+        self.fmin = fmin
+        self.fmax = fmax
         self.pre = preemphasis
         self.hop_length = int(frame_shift * sampling_rate)
         self.win_length = int(frame_length * sampling_rate)
@@ -38,6 +42,22 @@ class STFTProcessor():
 
     def _istft(self, y):
         return librosa.istft(y, hop_length=self.hop_length, win_length=self.win_length)
+
+    def _build_mel_basis(self):
+        assert self.fmax <= self.sampling_rate // 2
+
+        return librosa.filters.mel(self.sampling_rate, self.n_fft, n_mels=self.n_mel, fmin=self.fmin, fmax=self.fmax)
+
+    def _linear_to_mel(self, S):
+        _mel_basis = self._build_mel_basis()
+
+        return np.dot(_mel_basis, S)
+
+    def _mel_to_linear(self, mel):
+        _mel_basis = self._build_mel_basis()
+        _inv_mel_basis = np.linalg.pinv(_mel_basis)
+
+        return np.maximum(1e-10, np.dot(_inv_mel_basis, mel))
 
     def _trim_silence(self, y):
         margin = int(self.sampling_rate * 0.1)
@@ -80,8 +100,8 @@ class STFTProcessor():
     def save_wav(self, y, path):
         """Save the signal to disk as wav
         """
-        y_norm = y * (32767 / max(0.01, np.max(np.abs(y))))
-        io.wavfile.write(path, self.sampling_rate, y_norm.astype(np.int16))
+        y *= (32767 / max(0.01, np.max(np.abs(y))))
+        io.wavfile.write(path, self.sampling_rate, y.astype(np.int16))
 
     def spectrogram(self, y):
         """Compute log-magnitude spectrogram of a signal
@@ -95,6 +115,22 @@ class STFTProcessor():
         """Invert spectrogram back to signal
         """
         S = self._denormalize(spectrogram)
-        S = self._db_to_amp(S + self.ref_db)
+        S = self._db_to_amp((S + self.ref_db))
+
+        return self._inv_preemphasis(self._griffin_lim(S**1.5, num_gl_iters))
+
+    def melspectrogram(self, y):
+        """Compute melspectrogram of a signal
+        """
+        D = self._stft(self._preemphasis(y))
+        S = self._amp_to_db(self._linear_to_mel(np.abs(D))) - self.ref_db
+
+        return self._normalize(S)
+
+    def inv_melspectrogram(self, melspectrogram, num_gl_iters):
+        """Invert melspectrogram back to signal
+        """
+        S = self._denormalize(melspectrogram)
+        S = self._mel_to_linear(self._db_to_amp(S + self.ref_db))
 
         return self._inv_preemphasis(self._griffin_lim(S**1.5, num_gl_iters))
