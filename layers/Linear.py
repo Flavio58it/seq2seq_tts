@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class Dense(nn.Module):
+class Linear(nn.Module):
     """Feedforward linear layer with Xavier Uniform initialization
     """
     def __init__(self, in_dim, out_dim, bias=True, w_init_gain="linear"):
@@ -31,7 +31,7 @@ class Prenet(nn.Module):
         super().__init__()
 
         layer_sizes = [in_dim] + prenet_layers
-        self.layers = nn.ModuleList([Dense(in_size, out_size, bias=True) for in_size, out_size in
+        self.layers = nn.ModuleList([Linear(in_size, out_size, bias=True) for in_size, out_size in
                                      zip(layer_sizes, layer_sizes[1:])])
         self.dropout = dropout
 
