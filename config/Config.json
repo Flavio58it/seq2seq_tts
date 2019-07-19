@@ -15,6 +15,7 @@
      "n_mel": 80,
      "fmin": 125,
      "fmax": 7600,
+     "max_frames": 900,
 
      "num_gl_iters": 60,
 
