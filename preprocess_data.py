@@ -13,7 +13,7 @@ def process_data(config, prompts_file, wav_dir, output_dir):
     """Process the data
     """
     text_dir = os.path.join(output_dir, "text")
-    feats_dir = os.path.join(output_dir, config["audio_processor"])
+    feats_dir = os.path.join(output_dir, config["data_processors"]["audio_processor"])
 
     os.makedirs(text_dir, exist_ok=True)
     os.makedirs(feats_dir, exist_ok=True)
@@ -25,12 +25,13 @@ def process_data(config, prompts_file, wav_dir, output_dir):
     prompts = [line.split() for line in prompts]
 
     # instantiate audio processor
-    if config["audio_processor"] == "mag" or config["audio_processor"] == "mel":
-        audio_processor = STFTProcessor(sampling_rate=config["sampling_rate"], n_fft=config["n_fft"],
-                                        n_mel=config["n_mel"], fmin=config["fmin"], fmax=config["fmax"],
-                                        preemphasis=config["preemphasis"], frame_length=config["frame_length"],
-                                        frame_shift=config["frame_shift"], min_db=config["min_db"],
-                                        ref_db=config["ref_db"])
+    if config["data_processors"]["audio_processor"] == "mag" or config["data_processors"]["audio_processor"] == "mel":
+        audio_processor = STFTProcessor(sampling_rate=config["audio"]["sampling_rate"], n_fft=config["audio"]["n_fft"],
+                                        n_mel=config["audio"]["n_mel"], fmin=config["audio"]["fmin"],
+                                        fmax=config["audio"]["fmax"], preemphasis=config["audio"]["preemphasis"],
+                                        frame_length=config["audio"]["frame_length"],
+                                        frame_shift=config["audio"]["frame_shift"], min_db=config["audio"]["min_db"],
+                                        ref_db=config["audio"]["ref_db"])
     else:
         raise NotImplementedError
 
@@ -39,10 +40,10 @@ def process_data(config, prompts_file, wav_dir, output_dir):
         filename = line[0]
 
         # extract audio feats
-        if config["audio_processor"] == "mag":
+        if config["data_processors"]["audio_processor"] == "mag":
             y = audio_processor.load_wav(os.path.join(wav_dir, filename + ".wav"))
             feats = audio_processor.spectrogram(y).T
-        elif config["audio_processor"] == "mel":
+        elif config["data_processors"]["audio_processor"] == "mel":
             y = audio_processor.load_wav(os.path.join(wav_dir, filename + ".wav"))
             feats = audio_processor.melspectrogram(y).T
         else:
@@ -51,9 +52,9 @@ def process_data(config, prompts_file, wav_dir, output_dir):
         # number of frames in the extracted features
         num_frames = feats.shape[0]
 
-        # save features for training only when the number of frames is not too large
+        # save features of a particular utterance for training only when the number of frames is not too large
         # (to enable the model to learn a clean attention)
-        if num_frames <= config["max_frames"]:
+        if num_frames <= config["audio"]["max_frames"]:
             print("Processing ... %s ...." % (filename))
             np.save(os.path.join(feats_dir, filename + ".npy"), feats)
             with open(os.path.join(text_dir, filename + ".txt"), "w") as fp:
