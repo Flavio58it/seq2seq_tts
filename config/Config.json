@@ -1,49 +1,64 @@
 {
-     "audio_processor": "mel",
-     "text_processor": "english",
-
      "model": "Tacotron2",
+
+     "data_processors":{
+          "audio_processor": "mel",
+          "text_processor": "english"
+     },
      
-     "sampling_rate": 16000,
-     "preemphasis": 0.97,
-     "min_db": -100,
-     "ref_db": 20,
-     "frame_shift": 0.0125,
-     "frame_length": 0.05,
+     "audio":{
+          "sampling_rate": 16000,
+          "preemphasis": 0.97,
+          "min_db": -100,
+          "ref_db": 20,
+          "frame_shift": 0.0125,
+          "frame_length": 0.05,
+          
+          "n_fft": 1024,
+          "n_mel": 80,
+          "fmin": 90,
+          "fmax": 7600,
+          "max_frames": 900,
+          
+          "num_gl_iters": 60
+     },
 
-     "n_fft": 1024,
-     "n_mel": 80,
-     "fmin": 125,
-     "fmax": 7600,
-     "max_frames": 900,
+     "architecture":{
+          "embedding_dim": 512,
+          "dropout_rate": 0.5,
 
-     "num_gl_iters": 60,
+          "encoder":{
+               "num_layers": 3,
+               "kernel_size": 5,
+               "filters": 512,
+               "BLSTM_size": 512
+          },
+          
+          "attention":{
+               "attn_size": 128,
+               "location_kernel_size": 31,
+               "location_filters": 32
+          },
 
-     "embedding_dim": 512,
+          "decoder":{
+               "prenet": [256, 256],
+               "num_LSTMCells": 2,
+               "LSTMCell_size": 512,
+               "max_steps": 2000
+          },
+          
+          "postnet":{
+               "num_layers": 5,
+               "kernel_size": 5,
+               "filters": 512
+          }
+     },
 
-     "enc_num_layers": 3,
-     "enc_kernel_size": 5,
-     "enc_filters": 512,
-     "enc_BLSTM_size": 512,
-
-     "attn_size": 128,
-     "location_kernel_size": 31,
-     "location_filters": 32,
-
-     "dec_prenet": [256, 256],
-     "num_LSTMCells": 2,
-     "dec_LSTMCell_size": 512,
-     "max_dec_steps": 2000,
-
-     "postnet_num_layers": 5,
-     "postnet_kernel_size": 5,
-     "postnet_filters": 512,
-
-     "dropout_rate": 0.5,
-
-     "num_epochs": 10000,
-     "steps_per_checkpoint": 1500,
-     "batch_size": 32,
-     "lr": 1e-3,
-     "L2_reg_weight": 1e-6
+     "training":{
+          "num_epochs": 10000,
+          "steps_per_checkpoint": 1500,
+          "batch_size": 32,
+          "lr": 1e-3,
+          "L2_reg_weight": 1e-6
+     }
 }
