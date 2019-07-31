@@ -1,15 +1,16 @@
 """Attention layer"""
 
 import torch
-import torch.nn.functional as F
 import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable
 
 from layers.Convolution import Conv1D
 from layers.Linear import Linear
 
 
 class LocationLayer(nn.Module):
-    """Location features from current and cumulative attention attention weights from previous decoder timesteps
+    """Location features from current and cumulative alignments
     """
     def __init__(self, attn_dim, location_filters, location_kernel_size):
         """Constructor
@@ -20,19 +21,16 @@ class LocationLayer(nn.Module):
         self.location_filters = location_filters
         self.location_kernel_size = location_kernel_size
 
-        self.location_conv = Conv1D(2, location_filters, kernel_size=location_kernel_size, stride=1, dilation=1)
-        self.location_dense = Linear(location_filters, attn_dim, bias=True, w_init_gain="tanh")
+        self.location_conv = Conv1D(2, location_filters, kernel_size=location_kernel_size, stride=1)
+        self.location_dense = Linear(location_filters, attn_dim, bias=False, init_gain="tanh")
 
-    def forward(self, attention_weights):
+    def forward(self, alignments):
         """Forward pass
         """
-        attention_weights = attention_weights.transpose(1, 2)
-        location_features = self.location_conv(attention_weights)
-        location_features = location_features.transpose(1, 2)
+        location_features = self.location_conv(alignments.transpose(1, 2))
+        processed_alignments = self.location_dense(location_features.tranpose(1, 2))
 
-        processed_attention_weights = self.location_dense(location_features)
-
-        return processed_attention_weights
+        return processed_alignments
 
 
 class LocationSensitiveAttention(nn.Module):
@@ -57,30 +55,48 @@ class LocationSensitiveAttention(nn.Module):
 
         self.score_mask_value = -float("inf")
 
-    def compute_alignment(self, processed_query, processed_memory, processed_attention_weights):
-        """Compute the alignment score
+    def init_states(self, memory):
+        """Initialize the states
         """
-        score = self.v(torch.tanh(processed_query + processed_memory + processed_attention_weights))
+        B = memory.shape[0]
+        T = memory.shape[1]
 
+        self.alignment = Variable(memory.data.new(B, T).zero_())
+        self.cumulative_alignment = Variable(memory.data.new(B, T).zero_())
+
+    def compute_attention_score(self, query, processed_memory):
+        """Compute the attention score
+        """
+        alignments_cat = torch.cat((self.alignment.unsqueeze(-1), self.cumulative_alignment.unsqueeze(-1)), dim=-1)
+        processed_query = self.query_layer(query.unsqueeze(1))
+        processed_attention_weights = self.location_layer(alignments_cat)
+
+        score = self.v(torch.tanh(processed_query + processed_memory + processed_attention_weights))
         score = score.squeeze(-1)
 
         return score
 
-    def forward(self, query, memory, prev_attention_weights, mask=None):
+    def forward(self, query, memory, mask):
         """Forward pass
         """
-        processed_query = self.query_layer(query.unsqueeze(1))
+        # compute the attention score
         processed_memory = self.memory_layer(memory)
-        processed_attention_weights = self.location_layer(prev_attention_weights)
+        attention = self.compute_attention_score(query, processed_memory)
 
-        alignment = self.compute_alignment(processed_query, processed_memory, processed_attention_weights)
-
+        # apply masking
         if mask is not None:
-            alignment.data.masked_fill_(mask, self.score_mask_value)
+            attention.data.masked_fill_(1 - mask, self.score_mask_value)
 
-        attention_weights = F.softmax(alignment, dim=-1)
+        # normalize the attention values
+        alignment = torch.softmax(attention, dim=-1)
 
-        attention_context = torch.bmm(attention_weights.unsqueeze(1), memory)
+        # cumulate alignment
+        self.cumulative_alignment += alignment
+
+        # compute attention context
+        attention_context = torch.bmm(alignment.unsqueeze(1), memory)
         attention_context = attention_context.squeeze(1)
 
-        return attention_context, attention_weights
+        self.alignment = alignment
+
+        return attention_context, alignment
