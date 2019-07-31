@@ -8,13 +8,17 @@ import torch.nn.functional as F
 class Linear(nn.Module):
     """Feedforward linear layer with Xavier Uniform initialization
     """
-    def __init__(self, in_dim, out_dim, bias=True, w_init_gain="linear"):
+    def __init__(self, in_dim, out_dim, bias=True, init_gain="linear"):
         """Constructor
         """
         super().__init__()
-        self.dense_layer = torch.nn.Linear(in_dim, out_dim, bias=bias)
+        self.linear_layer = torch.nn.Linear(in_dim, out_dim, bias=bias)
+        self._init_weights(init_gain)
 
-        torch.nn.init.xavier_uniform_(self.dense_layer.weight, gain=torch.nn.init.calculate_gain(w_init_gain))
+    def _init_weights(self, init_gain):
+        """Initialize the weights of the linear layer
+        """
+        torch.nn.init.xavier_uniform_(self.linear_layer.weight, gain=torch.nn.init.calculate_gain(init_gain))
 
     def forward(self, inputs):
         """Forward pass
