@@ -5,18 +5,22 @@ import os
 import torch
 
 
-def get_mask(sequence_lengths):
-    """Generate mask given sequence lengths
+def sequence_mask(sequence_lengths, maxlen=None):
+    """Generate sequence mask given sequence lengths
     """
-    max_len = torch.max(sequence_lengths).item()
-    if torch.cuda.is_available():
-        idx = torch.arange(0, max_len, out=torch.cuda.LongTensor(max_len))
-    else:
-        idx = torch.arange(0, max_len, out=torch.LongTensor(max_len))
+    if maxlen is None:
+        maxlen = sequence_lengths.data.max()
 
-    mask = (idx < sequence_lengths.unsqueeze(1)).byte()
+    batch_size = sequence_lengths.size(0)
+    seq_range = torch.arange(0, maxlen).long()
+    seq_range_expand = seq_range.unsqueeze(0).expand(batch_size, maxlen)
 
-    return ~mask
+    if sequence_lengths.is_cuda:
+        seq_range_expand = seq_range_expand.cuda()
+
+    seq_length_expand = (sequence_lengths.unsqueeze(1).expand_as(seq_range_expand))
+
+    return seq_range_expand < seq_length_expand
 
 
 def to_gpu(x):
