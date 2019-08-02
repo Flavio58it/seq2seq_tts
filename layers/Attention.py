@@ -2,7 +2,6 @@
 
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
 
 from layers.Convolution import Conv1D
 from layers.Linear import Linear
@@ -54,19 +53,9 @@ class LocationSensitiveAttention(nn.Module):
 
         self.score_mask_value = -float("inf")
 
-    def init_states(self, memory):
-        """Initialize the states
-        """
-        B = memory.shape[0]
-        T = memory.shape[1]
-
-        self.alignment = Variable(memory.data.new(B, T).zero_())
-        self.cumulative_alignment = Variable(memory.data.new(B, T).zero_())
-
-    def compute_attention_score(self, query, processed_memory):
+    def compute_attention_score(self, query, processed_memory, alignments_cat):
         """Compute the attention score
         """
-        alignments_cat = torch.cat((self.alignment.unsqueeze(-1), self.cumulative_alignment.unsqueeze(-1)), dim=-1)
         processed_query = self.query_layer(query.unsqueeze(1))
         processed_attention_weights = self.location_layer(alignments_cat)
 
@@ -75,12 +64,12 @@ class LocationSensitiveAttention(nn.Module):
 
         return score
 
-    def forward(self, query, memory, mask):
+    def forward(self, query, memory, alignments_cat, mask):
         """Forward pass
         """
         # compute the attention score
         processed_memory = self.memory_layer(memory)
-        attention = self.compute_attention_score(query, processed_memory)
+        attention = self.compute_attention_score(query, processed_memory, alignments_cat)
 
         # apply masking
         if mask is not None:
@@ -89,13 +78,8 @@ class LocationSensitiveAttention(nn.Module):
         # normalize the attention values
         alignment = torch.softmax(attention, dim=-1)
 
-        # cumulate alignment
-        self.cumulative_alignment += alignment
-
         # compute attention context
-        attention_context = torch.bmm(alignment.unsqueeze(1), memory)
-        attention_context = attention_context.squeeze(1)
+        context = torch.bmm(alignment.unsqueeze(1), memory)
+        context = context.squeeze(1)
 
-        self.alignment = alignment
-
-        return attention_context, alignment
+        return context, alignment
