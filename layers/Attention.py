@@ -49,8 +49,8 @@ class LocationSensitiveAttention(nn.Module):
         self.location_filters = location_filters
         self.location_kernel_size = location_kernel_size
 
-        self.query_layer = Linear(query_dim, attn_dim, bias=True, w_init_gain="tanh")
-        self.memory_layer = Linear(memory_dim, attn_dim, bias=True, w_init_gain="tanh")
+        self.query_layer = Linear(query_dim, attn_dim, bias=True, init_gain="tanh")
+        self.memory_layer = Linear(memory_dim, attn_dim, bias=True, init_gain="tanh")
         self.location_layer = LocationLayer(attn_dim, location_filters, location_kernel_size)
         self.v = Linear(attn_dim, 1, bias=True)
 
