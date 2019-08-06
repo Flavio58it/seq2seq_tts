@@ -36,8 +36,8 @@
           
           "attention":{
                "attn_size": 128,
-               "location_kernel_size": 31,
-               "location_filters": 32
+               "kernel_size": 31,
+               "filters": 32
           },
 
           "decoder":{
