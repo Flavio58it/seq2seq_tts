@@ -23,7 +23,7 @@ class Linear(nn.Module):
     def forward(self, inputs):
         """Forward pass
         """
-        return self.dense_layer(inputs)
+        return self.linear_layer(inputs)
 
 
 class Prenet(nn.Module):
