@@ -20,13 +20,16 @@ class LocationLayer(nn.Module):
         self.location_kernel_size = location_kernel_size
 
         self.location_conv = Conv1D(2, location_filters, kernel_size=location_kernel_size, stride=1)
-        self.location_dense = Linear(location_filters, attn_dim, bias=False, init_gain="tanh")
+        self.location_dense = Linear(location_filters, attn_dim, bias=True, init_gain="tanh")
 
     def forward(self, alignments):
         """Forward pass
         """
-        location_features = self.location_conv(alignments.transpose(1, 2))
-        processed_alignments = self.location_dense(location_features.tranpose(1, 2))
+        alignments = alignments.transpose(1, 2)
+        location_features = self.location_conv(alignments)
+        location_features = location_features.transpose(1, 2)
+
+        processed_alignments = self.location_dense(location_features)
 
         return processed_alignments
 
@@ -53,33 +56,33 @@ class LocationSensitiveAttention(nn.Module):
 
         self.score_mask_value = -float("inf")
 
-    def compute_attention_score(self, query, processed_memory, alignments_cat):
+    def compute_attention_score(self, query, processed_memory, alignments):
         """Compute the attention score
         """
         processed_query = self.query_layer(query.unsqueeze(1))
-        processed_attention_weights = self.location_layer(alignments_cat)
+        processed_alignments = self.location_layer(alignments)
 
-        score = self.v(torch.tanh(processed_query + processed_memory + processed_attention_weights))
-        score = score.squeeze(-1)
+        attention_score = self.v(torch.tanh(processed_query + processed_memory + processed_alignments))
+        attention_score = attention_score.squeeze(-1)
 
-        return score
+        return attention_score
 
-    def forward(self, query, memory, alignments_cat, mask):
+    def forward(self, query, memory, alignments, mask):
         """Forward pass
         """
         # compute the attention score
         processed_memory = self.memory_layer(memory)
-        attention = self.compute_attention_score(query, processed_memory, alignments_cat)
+        attention_score = self.compute_attention_score(query, processed_memory, alignments)
 
         # apply masking
         if mask is not None:
-            attention.data.masked_fill_(1 - mask, self.score_mask_value)
+            attention_score.data.masked_fill_(mask, self.score_mask_value)
 
         # normalize the attention values
-        alignment = torch.softmax(attention, dim=-1)
+        alignment = torch.softmax(attention_score, dim=-1)
 
         # compute attention context
-        context = torch.bmm(alignment.unsqueeze(1), memory)
-        context = context.squeeze(1)
+        attention_context = torch.bmm(alignment.unsqueeze(1), memory)
+        attention_context = attention_context.squeeze(1)
 
-        return context, alignment
+        return attention_context, alignment
