@@ -6,8 +6,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 from layers.Attention import LocationSensitiveAttention
-from layers.Linear import Dense, Prenet
-from utils.Common import get_mask
+from layers.Linear import Linear, Prenet
 
 
 class Tacotron2Decoder(nn.Module):
@@ -33,10 +32,10 @@ class Tacotron2Decoder(nn.Module):
         self.decoder_LSTMs = nn.ModuleList([nn.LSTMCell(in_dim, hidden_dim, bias=True) for in_dim, hidden_dim in
                                             zip(rnn_sizes, rnn_sizes[1:])])
 
-        self.attention = LocationSensitiveAttention(dec_LSTMCell_size, memory_dim, attn_dim, location_filters,
-                                                    location_kernel_size)
-        self.acoustic_projection = Dense(dec_LSTMCell_size + memory_dim, target_dim, bias=True)
-        self.gate_projection = Dense(dec_LSTMCell_size + memory_dim, 1, bias=True, init_gain="sigmoid")
+        self.attention = LocationSensitiveAttention(dec_LSTMCell_size + memory_dim, memory_dim, attn_dim,
+                                                    location_filters, location_kernel_size)
+        self.acoustic_projection = Linear(dec_LSTMCell_size + memory_dim, target_dim, bias=True)
+        self.gate_projection = Linear(dec_LSTMCell_size + memory_dim, 1, bias=True, init_gain="sigmoid")
 
     def _get_go_frame(self, memory):
         """Get all zeros frame to be used to start the decoding (as first input to the decoder)
@@ -118,7 +117,7 @@ class Tacotron2Decoder(nn.Module):
 
         return acoustic_frame, stop_token, self.alignment
 
-    def forward(self, inputs, memory, memory_lengths):
+    def forward(self, inputs, memory, mask):
         """Forward pass for training
         """
         go_frame = self._get_go_frame(memory).unsqueeze(1)
@@ -130,8 +129,7 @@ class Tacotron2Decoder(nn.Module):
         outputs, stop_tokens, alignments = [], [], []
         while len(outputs) < inputs.size(0) - 1:
             inputs = inputs[len(outputs)]
-            acoustic_frame, stop_token, alignment = self.step(inputs, memory, mask=get_mask(memory_lengths),
-                                                              training=True)
+            acoustic_frame, stop_token, alignment = self.step(inputs, memory, mask=mask, training=True)
             outputs += [acoustic_frame.squeeze(1)]
             stop_tokens += [stop_token.squeeze(1)]
             alignments += [alignment]
