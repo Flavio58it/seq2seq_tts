@@ -9,7 +9,7 @@ The model is a seq2seq feature prediction network with attention which predicts 
 
 Requirements: <br />
         (1) python 3.7 <br />
-        (2) pytorch 1.1 <br />
+        (2) tensorflow 2.0 <br />
         (3) librosa <br />
 
 ### Completed Work
