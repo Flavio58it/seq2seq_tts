@@ -2,33 +2,17 @@
 
 import os
 
-import torch
+import tensorflow as tf
 
 
-def sequence_mask(sequence_lengths):
-    """Generate sequence mask given sequence lengths
+def sequence_mask(sequence_lengths, expand=True):
+    """Returns a 2-D or a 3-D sequence mask
     """
-    maxlen = torch.max(sequence_lengths).item()
+    maxlen = tf.reduce_max(sequence_lengths)
+    if expand:
+        return tf.expand_dims(tf.sequence_mask(sequence_lengths, maxlen=maxlen, dtype=tf.float32), axis=-1)
 
-    if torch.cuda.is_available():
-        idx = torch.arange(0, maxlen, out=torch.cuda.LongTensor(maxlen))
-    else:
-        idx = torch.arange(0, maxlen, out=torch.LongTensor(maxlen))
-
-    mask = (idx < sequence_lengths.unsqueeze(1)).byte()
-
-    return ~mask
-
-
-def to_gpu(x):
-    """Place a tensor on the GPU (if available)
-    """
-    x = x.contiguous()
-
-    if torch.cuda.is_available():
-        x = x.cuda(non_blocking=True)
-
-    return torch.autograd.Variable(x)
+    return tf.sequence_mask(sequence_lengths, maxlen=maxlen, dtype=tf.float32)
 
 
 def make_filepaths(text_dir, feats_dir, scp_file):
