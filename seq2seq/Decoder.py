@@ -1,85 +1,82 @@
 """seq2seq Decoder"""
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.autograd import Variable
+import tensorflow as tf
 
 from layers.Attention import LocationSensitiveAttention
 from layers.Linear import Linear, Prenet
 
 
-class Tacotron2Decoder(nn.Module):
+class Tacotron2Decoder(tf.kears.Model):
     """Tacotron2 Decoder
     """
-    def __init__(self, target_dim, memory_dim, prenet_layers, attn_dim, location_filters, location_kernel_size,
-                 num_LSTMCells, dec_LSTMCell_size, dropout, max_decoder_steps):
+    def __init__(self, prenet_layers, model_target_dim, attn_dim, location_filters, location_kernel_size,
+                 num_rnn_cells, rnn_cell_size, dropout, max_decoder_steps):
         """Constructor
         """
         super().__init__()
 
-        self.target_dim = target_dim
-        self.memory_dim = memory_dim
+        self.prenet_layers = prenet_layers
+        self.model_target_dim = model_target_dim
         self.attn_dim = attn_dim
-        self.num_LSTMCells = num_LSTMCells
-        self.dec_LSTMCell_size = dec_LSTMCell_size
+        self.location_filters = location_filters
+        self.location_kernel_size = location_kernel_size
+        self.num_rnn_cells = num_rnn_cells
+        self.rnn_cell_size = rnn_cell_size
         self.dropout = dropout
         self.max_decoder_steps = max_decoder_steps
 
-        self.prenet = Prenet(target_dim, prenet_layers, dropout=dropout)
+        self.prenet = Prenet(prenet_layers=prenet_layers, dropout=dropout)
 
-        rnn_sizes = [prenet_layers[-1] + memory_dim] + num_LSTMCells * [dec_LSTMCell_size]
-        self.decoder_LSTMs = nn.ModuleList([nn.LSTMCell(in_dim, hidden_dim, bias=True) for in_dim, hidden_dim in
-                                            zip(rnn_sizes, rnn_sizes[1:])])
+        self.attention = LocationSensitiveAttention(attn_dim=attn_dim, location_filters=location_filters,
+                                                    location_kernel_size=location_kernel_size)
 
-        self.attention = LocationSensitiveAttention(dec_LSTMCell_size + memory_dim, memory_dim, attn_dim,
-                                                    location_filters, location_kernel_size)
-        self.acoustic_projection = Linear(dec_LSTMCell_size + memory_dim, target_dim, bias=True)
-        self.gate_projection = Linear(dec_LSTMCell_size + memory_dim, 1, bias=True, init_gain="sigmoid")
+        self.decoder = [tf.keras.layers.LSTMCell(units=rnn_cell_size, use_bias=True,
+                                                 kernel_initializer="glorot_uniform") for _ in range(num_rnn_cells)]
+
+        self.acoustic_projection = Linear(hidden_dim=model_target_dim, bias=True)
+        self.stop_token_projection = Linear(hidden_dim=1, bias=True)
 
     def _get_go_frame(self, memory):
-        """Get all zeros frame to be used to start the decoding (as first input to the decoder)
+        """Get all zeros frame to be used to start the decoding (as decoder input for zeroth timestep)
         """
-        batch_size = memory.size(0)
-        go_frame = Variable(memory.data.new(batch_size, self.target_dim).zero_())
+        B = memory.get_shape()[0]
+        go_frame = tf.zeros([B, self.model_target_dim])
 
         return go_frame
 
     def _init_states(self, memory):
-        """Initialize all states (decoder_rnn / attention states)
+        """Initialize all states (decoder rnn / attention states)
         """
-        batch_size = memory.size(0)
-        max_time = memory.size(1)
+        B = memory.get_shape()[0]
+        T = memory.get_shape()[1]
+        M = memory.get_shape()[2]
 
-        self.LSTM_hidden = [Variable(memory.data.new(batch_size, self.dec_LSTMCell_size).zero_())] *\
-            self.num_LSTMCells
+        self.h = [tf.zeros(B, self.rnn_cell_size)] * self.num_rnn_cells
+        self.c = [tf.zeros(B, self.rnn_cell_size)] * self.num_rnn_cells
 
-        self.LSTM_cell = [Variable(memory.data.new(batch_size, self.dec_LSTMCell_size).zero_())] *\
-            self.num_LSTMCells
-
-        self.alignment = Variable(memory.data.new(batch_size, max_time).zero_())
-        self.cumulative_alignments = Variable(memory.data.new(batch_size, max_time).zero_())
-        self.attention_context = Variable(memory.data.new(batch_size, self.memory_dim).zero_())
+        self.alignment = tf.zeros([B, T])
+        self.cumulative_alignments = tf.zeros([B, T])
+        self.context = tf.zeros([B, M])
 
     def parse_inputs(self, decoder_inputs):
         """Parses decoder inputs used in teacher forcing training
         """
-        # (batch_size, max_time, target_dim) -> (max_time, batch_size, target_dim)
-        decoder_inputs = decoder_inputs.transpose(0, 1)
+        # [B, T, target_dim] -> [T, B, target_dim]
+        decoder_inputs = tf.transpose(decoder_inputs, perm=[1, 0, 2])
 
         return decoder_inputs
 
     def parse_outputs(self, outputs, stop_tokens, alignments):
         """Parses the outputs of the decoder for further processing
         """
-        # alignments: (batch_size, max_time)
-        alignments = torch.stack(alignments).transpose(0, 1).contiguous()
+        # alignments [batch_size, max_time]
+        alignments = tf.stack(alignments, axis=1)
 
-        # acoustic outputs: (batch_size, max_time, target_dim)
-        outputs = torch.stack(outputs).transpose(0, 1).contiguous()
+        # acoustic outputs [batch_size, max_time, target_dim]
+        outputs = tf.stack(outputs, axis=1)
 
         # stop tokens
-        stop_tokens = torch.stack(stop_tokens).transpose(0, 1).contiguous()
+        stop_tokens = tf.stack(stop_tokens, axis=1)
 
         return outputs, stop_tokens, alignments
 
@@ -94,44 +91,42 @@ class Tacotron2Decoder(nn.Module):
                 (6) Predict <stop_token> output ys_{i} using s_{i} and c_{i} (concatenated)
         """
         decoder_input = self.prenet(decoder_input)
-        cell_input = torch.cat((decoder_input, self.attention_context), dim=-1)
 
-        for idx in range(self.num_LSTMCells):
-            self.LSTM_hidden[idx], self.LSTM_cell[idx] = self.decoder_LSTMs[idx](cell_input, (self.LSTM_hidden[idx],
-                                                                                              self.LSTM_cell[idx]))
-            self.LSTM_hidden[idx] = F.dropout(self.LSTM_hidden[idx], self.dropout, training=training)
-            self.LSTM_cell[idx] = F.dropout(self.LSTM_cell[idx], self.dropout, training=training)
-            cell_input = self.LSTM_hidden[idx]
+        cell_input = tf.concat([decoder_input, self.context], axis=-1)
+        for idx in range(self.num_rnn_cells):
+            _, [self.h[idx], self.c[idx]] = self.decoder[idx](cell_input, [self.h[idx], self.c[idx]])
+            self.h[idx] = self.dropout(self.h[idx], training=training)
+            self.c[idx] = self.dropout(self.c[idx], training=training)
+            cell_input = self.h[idx]
 
-        alignments_cat = torch.cat((self.alignment.unsqueeze(-1), self.cumulative_alignments.unsqueeze(-1)), dim=-1)
-
-        self.attention_context, self.alignment = self.attention(self.LSTM_hidden[-1], memory, alignments_cat,
-                                                                mask=mask)
-
+        alignments_cat = tf.concat([tf.expand_dims(self.alignment, axis=-1),
+                                    tf.expand_dims(self.cumulative_alignments, axis=-1)], axis=-1)
+        self.context, self.alignment = self.attention(self.h[-1], memory, alignments_cat, mask=mask)
         self.cumulative_alignments += self.alignment
 
-        cell_output = torch.cat((self.LSTM_hidden[-1], self.attention_context), dim=-1)
-
+        cell_output = tf.concat([self.h[-1], self.context], axis=-1)
         acoustic_frame = self.acoustic_projection(cell_output)
-        stop_token = self.gate_projection(cell_output)
+        stop_token = self.stop_token_projection(cell_output)
 
         return acoustic_frame, stop_token, self.alignment
 
-    def forward(self, inputs, memory, mask):
-        """Forward pass for training
+    def call(self, inputs, memory, mask):
+        """Training forward pass (Teacher forcing mode used in training, i.e previous timestep ground truth used as
+        input to current timestep)
         """
-        go_frame = self._get_go_frame(memory).unsqueeze(1)
-        inputs = torch.cat((go_frame, inputs), dim=1)
+        go_frame = tf.expand_dims(self._get_go_frame(memory), axis=1)
+        inputs = tf.concat([go_frame, inputs], axis=1)
         inputs = self.parse_inputs(inputs)
 
         self._init_states(memory)
 
         outputs, stop_tokens, alignments = [], [], []
-        while len(outputs) < inputs.size(0) - 1:
-            inputs = inputs[len(outputs)]
-            acoustic_frame, stop_token, alignment = self.step(inputs, memory, mask=mask, training=True)
-            outputs += [acoustic_frame.squeeze(1)]
-            stop_tokens += [stop_token.squeeze(1)]
+        while len(outputs) < inputs.get_shape()[0] - 1:
+            decoder_input = inputs[len(outputs)]
+            acoustic_frame, stop_token, alignment = self.step(decoder_input, memory, mask, training=True)
+
+            outputs += [tf.squeeze(acoustic_frame, axis=1)]
+            stop_tokens += [tf.squeeze(stop_token, axis=1)]
             alignments += [alignment]
 
         outputs, stop_tokens, alignments = self.parse_outputs(outputs, stop_tokens, alignments)
@@ -139,29 +134,27 @@ class Tacotron2Decoder(nn.Module):
         return outputs, stop_tokens, alignments
 
     def inference(self, memory):
-        """Inference
+        """Inference (previous timestep prediction used as input to the current timestep)
         """
-        inputs = self._get_go_frame(memory)
-
+        decoder_input = self._get_go_frame(memory)
         self._init_states(memory)
 
         outputs, stop_tokens, alignments = [], [], []
 
         while True:
-            acoustic_frame, stop_token, alignment = self.step(inputs, memory, mask=None, training=False)
+            acoustic_frame, stop_token, alignment = self.step(decoder_input, memory, mask=None, training=False)
 
-            outputs += [acoustic_frame.squeeze(1)]
-            stop_tokens += [stop_token.squeeze(1)]
+            outputs += [tf.squeeze(acoustic_frame, axis=1)]
+            stop_tokens += [tf.squeeze(stop_token, axis=1)]
             alignments += [alignment]
 
-            if torch.sigmoid(stop_token.data) >= 0.5:
+            if tf.keras.activations.sigmoid(stop_token).numpy() >= 0.5:
                 break
-
             if len(outputs) == self.max_decoder_steps:
                 print("Warning! Reached max decoder steps")
                 break
 
-            inputs = acoustic_frame
+            decoder_input = acoustic_frame
 
         outputs, stop_tokens, alignments = self.parse_outputs(outputs, stop_tokens, alignments)
 
