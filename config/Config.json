@@ -42,8 +42,8 @@
 
           "decoder":{
                "prenet": [256, 256],
-               "num_LSTMCells": 2,
-               "LSTMCell_size": 512,
+               "num_rnn_cells": 2,
+               "rnn_cell_size": 512,
                "max_steps": 2000
           },
           
