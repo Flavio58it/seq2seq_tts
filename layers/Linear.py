@@ -1,49 +1,41 @@
 """Linear layers"""
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+import tensorflow as tf
 
 
-class Linear(nn.Module):
-    """Feedforward linear layer with Xavier Uniform initialization
+class Linear(tf.keras.Model):
+    """Feedforward linear layer with Xavier uniform initialization
     """
-    def __init__(self, in_dim, out_dim, bias=True, init_gain="linear"):
+    def __init__(self, hidden_dim, bias=True):
         """Constructor
         """
         super().__init__()
-        self.linear_layer = torch.nn.Linear(in_dim, out_dim, bias=bias)
-        self._init_weights(init_gain)
 
-    def _init_weights(self, init_gain):
-        """Initialize the weights of the linear layer
-        """
-        torch.nn.init.xavier_uniform_(self.linear_layer.weight, gain=torch.nn.init.calculate_gain(init_gain))
+        self.hidden_dim = hidden_dim
+        self.bias = bias
 
-    def forward(self, inputs):
+        self.linear_layer = tf.keras.layers.Dense(units=hidden_dim, use_bias=bias, kernel_initializer="glorot_uniform")
+
+    def call(self, inputs):
         """Forward pass
         """
         return self.linear_layer(inputs)
 
 
-class Prenet(nn.Module):
-    """Prenet with feedforward linear layers + ReLU activations + dropout
+class Prenet(tf.keras.Model):
+    """Prenet with feedforward linear layers + ReLU activation + dropout
     """
-    def __init__(self, in_dim, prenet_layers, dropout=0.5):
+    def __init__(self, prenet_layers, dropout=0.5):
         """Constructor
         """
-        super().__init__()
+        self.layers = [Linear(hidden_dim=layer_dim, bias=True) for layer_dim in prenet_layers]
+        self.dropout = tf.keras.layers.Dropout(rate=dropout)
 
-        layer_sizes = [in_dim] + prenet_layers
-        self.layers = nn.ModuleList([Linear(in_size, out_size, bias=True) for in_size, out_size in
-                                     zip(layer_sizes, layer_sizes[1:])])
-        self.dropout = dropout
-
-    def forward(self, inputs):
+    def call(self, inputs):
         """Forward pass
         """
         for layer in self.layers:
-            # dropout in prenet in applied in inference also; to increase diversity
-            inputs = F.dropout(F.relu(layer(inputs)), p=self.dropout, training=True)
+            # dropout in prenet is applied in inference also; to increase diversity during synthesis
+            inputs = self.dropout(tf.keras.activations.relu(layer(inputs)), training=True)
 
         return inputs
