@@ -1,47 +1,34 @@
 """Post Processing Network"""
 
-import torch.nn as nn
-import torch
+import tensorflow as tf
 
 from layers.Convolution import BatchNormConv1D
 
 
-class Tacotron2PostNet(nn.Module):
-    """Post Processing Network
+class Tacotron2PostNet(tf.keras.Model):
+    """Tacotron2 Post Processing Network
     """
-    def __init__(self, in_dim, num_conv_layers, conv_filters, conv_kernel_size, dropout):
-        """Constructor
+    def __init__(self, model_target_dim, num_conv_layers, conv_filters, conv_kernel_size, dropout):
+        """Constuctor
         """
         super().__init__()
 
-        layer_sizes = [in_dim] + (num_conv_layers - 1) * [conv_filters] + [in_dim]
-        layer_activations = (num_conv_layers - 1) * [torch.tanh] + [None]
+        self.model_target_dim = model_target_dim
+        self.num_conv_layers = num_conv_layers
+        self.conv_filters = conv_filters
+        self.conv_kernel_size = conv_kernel_size
+        self.dropout = dropout
 
-        self.convs = nn.ModuleList([BatchNormConv1D(in_channels, out_channels, kernel_size=conv_kernel_size,
-                                                    activation=activation, dropout=dropout)
-                                    for in_channels, out_channels, activation in zip(layer_sizes, layer_sizes[1:],
-                                    layer_activations)])
+        sizes = (num_conv_layers - 1) * [conv_filters] + [model_target_dim]
+        activations = (num_conv_layers - 1) * [tf.keras.activations.tanh] + [None]
 
-    def forward(self, inputs):
+        self.convs = [BatchNormConv1D(filters=layer_size, kernel_size=conv_kernel_size, activation=layer_activation,
+                                      dropout=dropout) for layer_size, layer_activation in zip(sizes, activations)]
+
+    def call(self, inputs, training=False):
         """Forward pass
         """
-        inputs = inputs.transpose(1, 2)
-
         for conv in self.convs:
-            inputs = conv(inputs, training=True)
-
-        inputs = inputs.transpose(1, 2)
-
-        return inputs
-
-    def inference(self, inputs):
-        """Inference
-        """
-        inputs = inputs.transpose(1, 2)
-
-        for conv in self.convs:
-            inputs = conv(inputs, training=False)
-
-        inputs = inputs.transpose(1, 2)
+            inputs = conv(inputs, training=training)
 
         return inputs
