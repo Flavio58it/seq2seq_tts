@@ -15,6 +15,14 @@ def sequence_mask(sequence_lengths, expand=True):
     return tf.sequence_mask(sequence_lengths, maxlen=maxlen, dtype=tf.float32)
 
 
+def _masked_fill(x, mask, mask_value):
+    """Fill the values of tensor x corresponding to mask with the mask_value
+    """
+    mask_values_tensor = mask_value * tf.ones_like(score)
+
+    return tf.where(mask, score, mask_values_tensor)
+
+
 def make_filepaths(text_dir, feats_dir, scp_file):
     """Make full paths for text / feats files
     """
