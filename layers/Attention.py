@@ -1,13 +1,13 @@
-"""Attention layer"""
+"""Attention layers"""
 
-import torch
-import torch.nn as nn
+import tensorflow as tf
 
 from layers.Convolution import Conv1D
 from layers.Linear import Linear
+from utils.Common import _masked_fill
 
 
-class LocationLayer(nn.Module):
+class LocationLayer(tf.keras.Model):
     """Location features from current and cumulative alignments
     """
     def __init__(self, attn_dim, location_filters, location_kernel_size):
@@ -19,55 +19,53 @@ class LocationLayer(nn.Module):
         self.location_filters = location_filters
         self.location_kernel_size = location_kernel_size
 
-        self.location_conv = Conv1D(2, location_filters, kernel_size=location_kernel_size, stride=1)
-        self.location_dense = Linear(location_filters, attn_dim, bias=True, init_gain="tanh")
+        self.location_conv = Conv1D(filters=location_filters, kernel_size=location_kernel_size, bias=True)
+        self.location_dense = Linear(hidden_dim=attn_dim, bias=True)
 
-    def forward(self, alignments):
+    def call(self, alignments):
         """Forward pass
         """
-        alignments = alignments.transpose(1, 2)
         location_features = self.location_conv(alignments)
-        location_features = location_features.transpose(1, 2)
-
         processed_alignments = self.location_dense(location_features)
 
         return processed_alignments
 
 
-class LocationSensitiveAttention(nn.Module):
+class LocationSensitiveAttention(tf.keras.Model):
     """Location sensitive attention (extends additive attention to use cumulative attention weights from previous
     decoder timesteps as a feature)
     """
-    def __init__(self, query_dim, memory_dim, attn_dim, location_filters, location_kernel_size):
+    def __init__(self, attn_dim, location_filters, location_kernel_size):
         """Constructor
         """
         super().__init__()
 
-        self.query_dim = query_dim
-        self.memory_dim = memory_dim
         self.attn_dim = attn_dim
         self.location_filters = location_filters
         self.location_kernel_size = location_kernel_size
 
-        self.query_layer = Linear(query_dim, attn_dim, bias=True, init_gain="tanh")
-        self.memory_layer = Linear(memory_dim, attn_dim, bias=True, init_gain="tanh")
-        self.location_layer = LocationLayer(attn_dim, location_filters, location_kernel_size)
-        self.v = Linear(attn_dim, 1, bias=True)
+        self.query_layer = Linear(hidden_dim=attn_dim, bias=True)
+        self.memory_layer = Linear(hidden_dim=attn_dim, bias=True)
+        self.location_layer = LocationLayer(attn_dim=attn_dim, location_filters=location_filters,
+                                            location_kernel_size=location_kernel_size)
+        self.v = Linear(hidden_dim=1, bias=True)
 
         self.score_mask_value = -float("inf")
 
     def compute_attention_score(self, query, processed_memory, alignments):
         """Compute the attention score
         """
-        processed_query = self.query_layer(query.unsqueeze(1))
+        expanded_query = tf.expand_dims(query, axis=1)
+        processed_query = self.query_layer(expanded_query)
+
         processed_alignments = self.location_layer(alignments)
 
-        attention_score = self.v(torch.tanh(processed_query + processed_memory + processed_alignments))
+        attention_score = self.v(tf.keras.activations.tanh(processed_query + processed_memory + processed_alignments))
         attention_score = attention_score.squeeze(-1)
 
         return attention_score
 
-    def forward(self, query, memory, alignments, mask):
+    def call(self, query, memory, alignments, mask):
         """Forward pass
         """
         # compute the attention score
@@ -76,13 +74,13 @@ class LocationSensitiveAttention(nn.Module):
 
         # apply masking
         if mask is not None:
-            attention_score.data.masked_fill_(mask, self.score_mask_value)
+            attention_score = _masked_fill(attention_score, mask, self.score_mask_value)
 
         # normalize the attention values
-        alignment = torch.softmax(attention_score, dim=-1)
+        alignment = tf.keras.activations.softmax(attention_score, axis=-1)
 
         # compute attention context
-        attention_context = torch.bmm(alignment.unsqueeze(1), memory)
-        attention_context = attention_context.squeeze(1)
+        attention_context = tf.expand_dims(alignment, axis=1) * memory
+        attention_context = tf.reduce_sum(attention_context, axis=1)
 
         return attention_context, alignment
