@@ -1,16 +1,14 @@
 """Tacotron2 Model"""
 
-import math
-
-import torch.nn as nn
+import tensorflow as tf
 
 from seq2seq.Decoder import Tacotron2Decoder
 from seq2seq.Encoder import Tacotron2Encoder
 from seq2seq.PostNet import Tacotron2PostNet
-from utils.Common import sequence_mask
+from utils.Common import _masked_fill, sequence_mask
 
 
-class Tacotron2Model(nn.Module):
+class Tacotron2(tf.keras.Model):
     """Tacotron2 Model
     """
     def __init__(self, vocab_size, config):
@@ -26,69 +24,92 @@ class Tacotron2Model(nn.Module):
             raise NotImplementedError
 
         # embedding layer
-        self.embedding_layer = nn.Embedding(vocab_size, config["architecture"]["embedding_dim"])
-        std = math.sqrt(2.0 / (vocab_size + config["architecture"]["embedding_dim"]))
-        val = math.sqrt(3.0) * std
-        self.embedding_layer.weight.data.uniform_(-val, val)
+        self.embedding_layer = tf.keras.layers.Embedding(input_dim=vocab_size,
+                                                         output_dim=config["architecture"]["embedding_dim"])
 
         # encoder
-        self.encoder = Tacotron2Encoder(config["architecture"]["embedding_dim"],
-                                        num_conv_layers=config["architecture"]["encoder"]["num_layers"],
+        self.encoder = Tacotron2Encoder(num_conv_layers=config["architecture"]["encoder"]["num_layers"],
                                         conv_filters=config["architecture"]["encoder"]["filters"],
                                         conv_kernel_size=config["architecture"]["encoder"]["kernel_size"],
                                         BLSTM_size=config["architecture"]["encoder"]["BLSTM_size"],
                                         dropout=config["architecture"]["dropout_rate"])
 
         # decoder
-        self.decoder = Tacotron2Decoder(target_dim=self.target_dim,
-                                        memory_dim=config["architecture"]["encoder"]["BLSTM_size"],
-                                        prenet_layers=config["architecture"]["decoder"]["prenet"],
+        self.decoder = Tacotron2Decoder(prenet_layers=config["architecture"]["decoder"]["prenet"],
+                                        model_target_dim=self.target_dim,
                                         attn_dim=config["architecture"]["attention"]["attn_size"],
                                         location_filters=config["architecture"]["attention"]["filters"],
                                         location_kernel_size=config["architecture"]["attention"]["kernel_size"],
-                                        num_LSTMCells=config["architecture"]["decoder"]["num_LSTMCells"],
-                                        dec_LSTMCell_size=config["architecture"]["decoder"]["LSTMCell_size"],
+                                        num_rnn_cells=config["architecture"]["decoder"]["num_rnn_cells"],
+                                        rnn_cell_size=config["architecture"]["decoder"]["rnn_cell_size"],
                                         dropout=config["architecture"]["dropout_rate"],
                                         max_decoder_steps=config["architecture"]["decoder"]["max_steps"])
 
         # post processing network
-        self.postnet = Tacotron2PostNet(in_dim=self.target_dim,
+        self.postnet = Tacotron2PostNet(model_target_dim=self.target_dim,
                                         num_conv_layers=config["architecture"]["postnet"]["num_layers"],
                                         conv_filters=config["architecture"]["postnet"]["filters"],
                                         conv_kernel_size=config["architecture"]["postnet"]["kernel_size"],
                                         dropout=config["architecture"]["dropout_rate"])
 
-    def forward(self, texts, text_lengths, acoustic_feats):
-        """Forward pass
+    def parse_inputs(self, inputs):
+        """Parse the inputs to the model
         """
-        # compute sequence mask
-        mask = sequence_mask(text_lengths).to(texts.device)
+        texts_padded, text_lengths, acoustics_padded, stop_tokens_padded, acoustic_lengths = inputs
+
+        return ((texts_padded, text_lengths, acoustics_padded, acoustic_lengths),
+                (acoustics_padded, stop_tokens_padded))
+
+    def parse_outputs(self, outputs, output_lengths=None):
+        """Parse the outputs of the model
+        """
+        postnet_acoustic_outputs, acoustic_outputs, stop_tokens, alignments = outputs
+
+        if output_lengths is not None:
+            mask = sequence_mask(output_lengths, expand=True)
+
+            postnet_acoustic_outputs = _masked_fill(postnet_acoustic_outputs, mask, 0.0)
+            acoustic_outputs = _masked_fill(acoustic_outputs, mask, 0.0)
+            stop_tokens = _masked_fill(stop_tokens, mask[:, 0, :], 1e3)
+
+        return (postnet_acoustic_outputs, acoustic_outputs, stop_tokens, alignments)
+
+    def call(self, inputs):
+        """Training forward pass
+        """
+        texts_padded, text_lengths, acoustics_padded, stop_tokens_padded, acoustic_lengths = inputs
+
+        # embedding layer
+        embeddings = self.embedding_layer(texts_padded)
 
         # encoder
-        embeddings = self.embedding_layer(texts)
-        memory = self.encoder(embeddings, text_lengths)
+        memory = self.encoder(embeddings, training=True)
 
         # decoder
-        acoustic_outputs, stop_tokens, alignments = self.decoder(acoustic_feats, memory, mask)
+        acoustic_outputs, stop_tokens, alignments = self.decoder(acoustics_padded, memory,
+                                                                 mask=sequence_mask(text_lengths, expand=False))
 
         # post processing network
-        acoustic_outputs_postnet = self.postnet(acoustic_outputs)
-        acoustic_outputs_postnet = acoustic_outputs_postnet + acoustic_outputs
+        postnet_acoustic_outputs = self.postnet(acoustic_outputs, training=True)
+        postnet_acoustic_outputs = postnet_acoustic_outputs + acoustic_outputs
 
-        return acoustic_outputs_postnet, acoustic_outputs, stop_tokens, alignments
+        return self.parse_outputs((postnet_acoustic_outputs, acoustic_outputs, stop_tokens, alignments),
+                                  output_lengths=acoustic_lengths)
 
     def inference(self, text):
         """Inference
         """
-        # encoder
+        # embedding layer
         embeddings = self.embedding_layer(text)
-        memory = self.encoder.inference(embeddings)
+
+        # encoder
+        memory = self.encoder(embeddings, training=False)
 
         # decoder
         acoustic_outputs, stop_tokens, alignments = self.decoder.inference(memory)
 
         # post processing network
-        acoustic_outputs_postnet = self.postnet.inference(acoustic_outputs)
-        acoustic_outputs_postnet = acoustic_outputs_postnet + acoustic_outputs
+        postnet_acoustic_outputs = self.postnet(acoustic_outputs, training=False)
+        postnet_acoustic_outputs = postnet_acoustic_outputs + acoustic_outputs
 
-        return acoustic_outputs_postnet, acoustic_outputs, stop_tokens, alignments
+        return self.parse_outputs((postnet_acoustic_outputs, acoustic_outputs, stop_tokens, alignments))
